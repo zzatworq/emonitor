@@ -1,6 +1,7 @@
 import { createRootRoute, HeadContent, Outlet, Scripts } from "@tanstack/react-router";
 import { AuthProvider } from "@/lib/auth/provider";
 import { PreviewHostBridge } from "@/components/preview-host-bridge";
+import { ThemeProvider } from "@/components/theme-provider";
 import appCss from "../styles.css?url";
 
 const APP_NAME = "Electricity Monitor";
@@ -33,10 +34,12 @@ export const Route = createRootRoute({
         <HeadContent />
       </head>
       <body>
-        <PreviewHostBridge />
-        <AuthProvider>
-          <Outlet />
-        </AuthProvider>
+        <ThemeProvider>
+          <PreviewHostBridge />
+          <AuthProvider>
+            <Outlet />
+          </AuthProvider>
+        </ThemeProvider>
         <Scripts />
       </body>
     </html>
