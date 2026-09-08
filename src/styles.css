@@ -5,6 +5,7 @@
   --font-sans: "Source Sans 3", "Segoe UI", system-ui, sans-serif;
   --font-mono: "IBM Plex Mono", ui-monospace, Menlo, monospace;
 
+  /* Dark theme (default) */
   --color-background: #0c0d0b;
   --color-surface: #121410;
   --color-elevated: #181a16;
@@ -38,6 +39,26 @@
   --motion-slow: 400ms;
 }
 
+/* Light theme colors */
+:root[data-theme="light"] {
+  --color-background: #fafaf8;
+  --color-surface: #f5f3f0;
+  --color-elevated: #efefeb;
+  --color-foreground: #1a1a18;
+  --color-muted: #6a6a64;
+  --color-subtle: #9a9a94;
+  --color-border: color-mix(in oklab, var(--color-foreground) 12%, transparent);
+  --color-primary: #1a1a18;
+  --color-primary-foreground: #fafaf8;
+  --color-secondary: #e8e8e4;
+  --color-secondary-foreground: #1a1a18;
+  --color-ring: #4a4a44;
+  --color-meter1: #2a2a28;
+  --color-meter2: #5a7a72;
+  --color-danger: #d97c6f;
+  --color-danger-fg: #3a2a26;
+}
+
 @layer base {
   html {
     -webkit-font-smoothing: antialiased;
@@ -48,6 +69,8 @@
     color: var(--color-foreground);
     font-family: var(--font-sans);
     line-height: 1.5;
+    transition: background-color var(--motion-fast) var(--ease-out),
+                color var(--motion-fast) var(--ease-out);
   }
   h1, h2, h3 {
     text-wrap: balance;
