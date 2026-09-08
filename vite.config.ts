@@ -3,9 +3,9 @@ import { join } from "node:path";
 import type { Plugin } from "vite";
 import { defineConfig } from "vite";
 import { tanstackStart } from "@tanstack/react-start/plugin/vite";
+import { cloudflare } from "@cloudflare/vite-plugin";
 import viteReact from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
-import { nitro } from "nitro/vite";
 // @ts-expect-error JS plugin alongside the TS vite config
 import { grokPwaPlugin } from "./scripts/grok-pwa-plugin.mjs";
 // @ts-expect-error JS plugin alongside the TS vite config
@@ -63,11 +63,8 @@ function authPopupPlugin(): Plugin {
           const requestHeaders = new Headers();
           for (const [key, value] of Object.entries(req.headers)) {
             if (value === undefined) continue;
-            if (Array.isArray(value)) {
-              for (const v of value) requestHeaders.append(key, v);
-            } else {
-              requestHeaders.set(key, value);
-            }
+            if (Array.isArray(value)) value.forEach((v) => requestHeaders.append(key, v));
+            else requestHeaders.set(key, value);
           }
           if (!requestHeaders.has("host")) requestHeaders.set("host", host);
           const request = new Request(`${proto}://${host}${rawUrl}`, { method: "GET", headers: requestHeaders });
@@ -81,8 +78,7 @@ function authPopupPlugin(): Plugin {
             if (key.toLowerCase() !== "set-cookie") res.setHeader(key, value);
           });
           for (const cookie of setCookies) res.appendHeader("set-cookie", cookie);
-          const body = Buffer.from(await response.arrayBuffer());
-          res.end(body);
+          res.end(Buffer.from(await response.arrayBuffer()));
         } catch (err) {
           console.error("[app-builder] /auth/popup handler failed:", err);
           if (!res.headersSent) {
@@ -96,7 +92,7 @@ function authPopupPlugin(): Plugin {
   };
 }
 
-export default defineConfig(({ command, isPreview }) => ({
+export default defineConfig({
   server: {
     host: "0.0.0.0",
     port: 8080,
@@ -109,22 +105,13 @@ export default defineConfig(({ command, isPreview }) => ({
   },
   resolve: { tsconfigPaths: true },
   plugins: [
+    cloudflare({ viteEnvironment: { name: "ssr" } }),
     pgliteBootstrapPlugin(),
     authPopupPlugin(),
     appEnvPlugin(),
     grokPwaPlugin(),
     tailwindcss(),
     tanstackStart(),
-    ...(command === "build" || isPreview
-      ? [
-          nitro({
-            // The deployed target is Cloudflare Workers. The old Vercel
-            // preset emitted .vercel output, which is not a Workers runtime.
-            preset: "cloudflare_module",
-            serverDir: "./server",
-          }),
-        ]
-      : []),
     viteReact(),
   ],
-}));
+});
