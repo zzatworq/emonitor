@@ -131,15 +131,18 @@ function numberValue(value: string | undefined, row: number, field: string) {
   return n;
 }
 
-function legacyDateTime(date: string, time: string, row: number) {
+function parseDateParts(date: string, row: number) {
   const parts = date.trim().split(/[\/-]/).map(Number);
   if (parts.length !== 3 || parts.some((n) => !Number.isFinite(n))) {
     throw new Error(`Row ${row}: invalid date.`);
   }
   const [a, b, c] = parts;
-  const year = c < 100 ? 2000 + c : c;
-  const month = b;
-  const day = a;
+  if (a >= 1000) return { year: a, month: b, day: c };
+  return { year: c < 100 ? 2000 + c : c, month: b, day: a };
+}
+
+function legacyDateTime(date: string, time: string, row: number) {
+  const { year, month, day } = parseDateParts(date, row);
   const match = time.trim().match(/^(\d{1,2}):(\d{2})(?::(\d{2}))?\s*(AM|PM)?$/i);
   if (!match) throw new Error(`Row ${row}: invalid time.`);
   let hour = Number(match[1]);
@@ -207,9 +210,6 @@ export function parseReadingsCsv(text: string, existing: ReadingInput[]) {
     if (legacySwapFormat) {
       const isSwap = rawNew !== null && rawOld !== null;
       if (isSwap) {
-        // The legacy app recorded both physical meters at a swap. The first
-        // swap establishes M1=New and M2=Old; every later swap toggles which
-        // physical meter is active. Both physical readings are retained.
         if (!seenLegacySwap) {
           meter1 = rawNew;
           meter2 = rawOld;
