@@ -1,0 +1,19 @@
+{
+  "name": "emonitor",
+  "compatibility_date": "2026-09-07",
+  "main": ".vercel/output/functions/__server.func",
+  "assets": {
+    "directory": ".vercel/output/static",
+    "binding": "ASSETS"
+  },
+  "env": {
+    "production": {
+      "routes": [
+        {
+          "pattern": "emonitor.zzatworq.dev",
+          "zone_name": "zzatworq.dev"
+        }
+      ]
+    }
+  }
+}
