@@ -131,6 +131,36 @@ function numberValue(value: string | undefined, row: number, field: string) {
   return n;
 }
 
+function legacyDateTime(date: string, time: string, row: number) {
+  const parts = date.trim().split(/[\/-]/).map(Number);
+  if (parts.length !== 3 || parts.some((n) => !Number.isFinite(n))) {
+    throw new Error(`Row ${row}: invalid date.`);
+  }
+  const [a, b, c] = parts;
+  const year = c < 100 ? 2000 + c : c;
+  const month = b;
+  const day = a;
+  const match = time.trim().match(/^(\d{1,2}):(\d{2})(?::(\d{2}))?\s*(AM|PM)?$/i);
+  if (!match) throw new Error(`Row ${row}: invalid time.`);
+  let hour = Number(match[1]);
+  const minute = Number(match[2]);
+  const second = Number(match[3] ?? 0);
+  const meridiem = match[4]?.toUpperCase();
+  if (meridiem === "PM" && hour < 12) hour += 12;
+  if (meridiem === "AM" && hour === 12) hour = 0;
+  const dt = new Date(year, month - 1, day, hour, minute, second, 0);
+  if (
+    dt.getFullYear() !== year ||
+    dt.getMonth() !== month - 1 ||
+    dt.getDate() !== day ||
+    dt.getHours() !== hour ||
+    dt.getMinutes() !== minute
+  ) {
+    throw new Error(`Row ${row}: invalid date/time.`);
+  }
+  return dt.getTime();
+}
+
 export function parseReadingsCsv(text: string, existing: ReadingInput[]) {
   const rows = parseCsvRows(text.replace(/^\uFEFF/, ""));
   if (rows.length < 2) throw new Error("The CSV contains no reading rows.");
@@ -140,31 +170,77 @@ export function parseReadingsCsv(text: string, existing: ReadingInput[]) {
   const timeI = column(headers, "time");
   const m1I = column(headers, "meter 1", "meter1");
   const m2I = column(headers, "meter 2", "meter2");
+  const legacyNewI = column(headers, "new meter reading (kwh)", "new meter reading");
+  const legacyOldI = column(headers, "old meter reading (kwh)", "old meter reading");
   const loadI = column(headers, "inverter reading (kw)", "inverter kw", "load", "load kw");
   const notesI = column(headers, "notes", "note");
   const idI = column(headers, "id");
 
-  if (dateI < 0 || timeI < 0 || m1I < 0 || m2I < 0) {
-    throw new Error("CSV must contain Date, Time, Meter 1 and Meter 2 columns.");
+  const legacySwapFormat = legacyNewI >= 0 && legacyOldI >= 0;
+  if (dateI < 0 || timeI < 0 || (!legacySwapFormat && (m1I < 0 || m2I < 0))) {
+    throw new Error(
+      "CSV must contain Date and Time plus either Meter 1/Meter 2 or New Meter Reading/Old Meter Reading columns.",
+    );
   }
 
   const existingKeys = new Set(existing.map((r) => `${r.datetime}|${r.newInput}|${r.oldInput}|${r.loadKw}`));
   const imported: ReadingInput[] = [];
   let duplicates = 0;
+  let activeMeter: "new" | "old" = "new";
+  let seenLegacySwap = false;
+  let meter1: number | null = null;
+  let meter2: number | null = null;
 
   for (let i = 1; i < rows.length; i += 1) {
     const row = rows[i];
     const rowNumber = i + 1;
     if (!row[dateI]?.trim() && !row[timeI]?.trim()) continue;
 
-    const datetime = new Date(`${row[dateI]}T${row[timeI] || "00:00:00"}`).getTime();
-    if (!Number.isFinite(datetime)) throw new Error(`Row ${rowNumber}: invalid date/time.`);
+    const datetime = legacyDateTime(row[dateI] ?? "", row[timeI] ?? "", rowNumber);
+    const rawNew = legacySwapFormat
+      ? numberValue(row[legacyNewI], rowNumber, "New Meter Reading")
+      : numberValue(row[m1I], rowNumber, "Meter 1");
+    const rawOld = legacySwapFormat
+      ? numberValue(row[legacyOldI], rowNumber, "Old Meter Reading")
+      : numberValue(row[m2I], rowNumber, "Meter 2");
+
+    if (legacySwapFormat) {
+      const isSwap = rawNew !== null && rawOld !== null;
+      if (isSwap) {
+        // The legacy app recorded both physical meters at a swap. The first
+        // swap establishes M1=New and M2=Old; every later swap toggles which
+        // physical meter is active. Both physical readings are retained.
+        if (!seenLegacySwap) {
+          meter1 = rawNew;
+          meter2 = rawOld;
+          activeMeter = "new";
+          seenLegacySwap = true;
+        } else {
+          meter1 = rawNew;
+          meter2 = rawOld;
+          activeMeter = activeMeter === "new" ? "old" : "new";
+        }
+      } else if (rawNew !== null || rawOld !== null) {
+        const activeValue = rawNew ?? rawOld;
+        if (!seenLegacySwap) {
+          if (rawNew !== null) meter1 = rawNew;
+          if (rawOld !== null) meter2 = rawOld;
+        } else if (activeMeter === "new") {
+          meter1 = activeValue;
+        } else {
+          meter2 = activeValue;
+        }
+      }
+    } else {
+      if (rawNew !== null) meter1 = rawNew;
+      if (rawOld !== null) meter2 = rawOld;
+    }
 
     const reading: ReadingInput = {
       id: idI >= 0 && row[idI]?.trim() ? row[idI].trim() : `r-import-${Date.now().toString(36)}-${i}`,
       datetime,
-      newInput: numberValue(row[m1I], rowNumber, "Meter 1"),
-      oldInput: numberValue(row[m2I], rowNumber, "Meter 2"),
+      newInput: legacySwapFormat ? meter1 : rawNew,
+      oldInput: legacySwapFormat ? meter2 : rawOld,
       loadKw: loadI >= 0 ? numberValue(row[loadI], rowNumber, "Inverter Reading") : null,
       notes: notesI >= 0 ? row[notesI] ?? "" : "",
     };
