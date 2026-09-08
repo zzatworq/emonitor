@@ -1,7 +1,7 @@
 {
   "name": "emonitor",
   "compatibility_date": "2026-09-07",
-  "main": ".vercel/output/functions/__server.func",
+  "main": ".vercel/output/functions/__server.func/index.mjs",
   "assets": {
     "directory": ".vercel/output/static",
     "binding": "ASSETS"
